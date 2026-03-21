@@ -82,7 +82,7 @@ function DownloadPanel({ resultUrl, title, onReset }) {
         </svg>
         <span className="font-semibold">Clip ready!</span>
       </div>
-      {title && (
+      {title != null && (
         <div className="w-full rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-center">
           <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Suggested title</p>
           <p className="text-white font-semibold text-sm leading-snug">{title}</p>
@@ -141,7 +141,7 @@ export default function App() {
 
         if (data.status === 'done') {
           setResultUrl(data.result_url)
-          setClipTitle(data.title || '')
+          setClipTitle(data.title)
           setAppState('done')
           clearInterval(interval)
         } else if (data.status === 'error') {
