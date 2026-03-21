@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import whisper
@@ -53,27 +54,81 @@ def generate_title(transcript_text: str) -> str:
     return best
 
 
+def _srt_to_ass(srt_path: str, ass_path: str) -> None:
+    """Convert SRT to ASS with explicit PlayRes=1080x1920 so all units are real pixels."""
+    # Style fields (V4+): Name, Fontname, Fontsize, PrimaryColour, SecondaryColour,
+    # OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY,
+    # Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+    # Bold=-1 means true in ASS.
+    # Alignment=2: bottom-center. MarginV=480: 480px from bottom of 1920px frame = 75% down.
+    # FontSize=60: 60 real pixels tall — readable but not overwhelming.
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        "PlayResX: 1080\n"
+        "PlayResY: 1920\n"
+        "Collisions: Normal\n"
+        "\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,"
+        " BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle,"
+        " BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        "Style: Default,Impact,60,"
+        "&H00FFFFFF,&H000000FF,&H00000000,&H80000000,"
+        "-1,0,0,0,100,100,0,0,1,4,2,2,10,10,480,1\n"
+        "\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+
+    def _ts(srt_ts: str) -> str:
+        """Convert 'HH:MM:SS,mmm' to ASS 'H:MM:SS.cc' (centiseconds)."""
+        h, m, rest = srt_ts.strip().split(":")
+        s, ms = rest.replace(",", ".").split(".")
+        return f"{int(h)}:{m}:{s}.{int(ms) // 10:02d}"
+
+    with open(srt_path, encoding="utf-8") as f:
+        content = f.read()
+
+    dialogues = []
+    for block in content.strip().split("\n\n"):
+        lines = [ln.strip() for ln in block.strip().splitlines() if ln.strip()]
+        if not lines:
+            continue
+        # Skip optional index line
+        i = 1 if lines[0].isdigit() else 0
+        if i >= len(lines) or "-->" not in lines[i]:
+            continue
+        start_s, end_s = lines[i].split("-->")
+        text_lines = lines[i + 1:]
+        if not text_lines:
+            continue
+        text = r"\N".join(text_lines)
+        dialogues.append(f"Dialogue: 0,{_ts(start_s)},{_ts(end_s)},Default,,0,0,0,,{text}")
+
+    with open(ass_path, "w", encoding="utf-8") as f:
+        f.write(header)
+        f.write("\n".join(dialogues) + "\n")
+
+
 def burn_captions(video_path: str, srt_path: str, output_path: str) -> None:
-    style = (
-        "FontName=Impact,FontSize=14,Bold=1,"
-        "PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,"
-        "BackColour=&H80000000,"
-        "Outline=2,Shadow=2,"
-        "Alignment=2,MarginV=480"
-    )
-    vf = f"subtitles={srt_path}:force_style='{style}'"
-    subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-i", video_path,
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-crf", "23",
-            "-preset", "fast",
-            "-c:a", "copy",
-            output_path,
-        ],
-        check=True,
-        capture_output=True,
-    )
+    ass_path = srt_path.replace(".srt", ".ass")
+    _srt_to_ass(srt_path, ass_path)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-vf", f"subtitles={ass_path}",
+                "-c:v", "libx264",
+                "-crf", "23",
+                "-preset", "fast",
+                "-c:a", "copy",
+                output_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    finally:
+        if os.path.exists(ass_path):
+            os.remove(ass_path)
