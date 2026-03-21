@@ -55,12 +55,12 @@ def generate_title(transcript_text: str) -> str:
 
 def burn_captions(video_path: str, srt_path: str, output_path: str) -> None:
     style = (
-        "FontName=Impact,FontSize=22,Bold=1,"
+        "FontName=Impact,FontSize=14,Bold=1,"
         "PrimaryColour=&H00FFFFFF,"
         "OutlineColour=&H00000000,"
         "BackColour=&H80000000,"
-        "Outline=3,Shadow=2,"
-        "Alignment=2,MarginV=120"
+        "Outline=2,Shadow=2,"
+        "Alignment=2,MarginV=480"
     )
     vf = f"subtitles={srt_path}:force_style='{style}'"
     subprocess.run(
