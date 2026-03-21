@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from downloader import download_video
 from clipper import cut_clip, detect_highlight, reformat_vertical
-from captions import burn_captions, transcribe
+from captions import burn_captions, generate_title, transcribe
 
 os.makedirs("exports", exist_ok=True)
 os.makedirs("temp", exist_ok=True)
@@ -55,7 +55,7 @@ def run_pipeline(job_id: str, url: str) -> None:
         reformat_vertical(clip, vert)
 
         _update(job_id, "transcribing", "Generating captions...")
-        transcribe(vert, srt)
+        transcript = transcribe(vert, srt)
 
         _update(job_id, "burning", "Burning captions...")
         burn_captions(vert, srt, final)
@@ -67,6 +67,7 @@ def run_pipeline(job_id: str, url: str) -> None:
         jobs[job_id]["status"] = "done"
         jobs[job_id]["message"] = "Ready to download!"
         jobs[job_id]["result_url"] = f"/api/download/{job_id}_final.mp4"
+        jobs[job_id]["title"] = generate_title(transcript)
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
@@ -81,6 +82,7 @@ async def process_video(request: ProcessRequest, background_tasks: BackgroundTas
         "status": "starting",
         "message": "Starting...",
         "result_url": None,
+        "title": None,
         "error": None,
     }
     background_tasks.add_task(run_pipeline, job_id, request.url)
