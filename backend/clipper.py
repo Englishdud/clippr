@@ -52,6 +52,62 @@ def cut_clip(input_path: str, output_path: str, start: float, end: float) -> Non
     )
 
 
+def detect_hook(video_path: str, min_dur: float = 3.0, max_dur: float = 5.0) -> tuple[float, float]:
+    """Find the most energetic 3–5 second window inside the clip for use as a hook."""
+    wav_path = video_path.replace(".mp4", "_hook_audio.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-ac", "1", "-ar", "22050", wav_path],
+        check=True,
+        capture_output=True,
+    )
+
+    try:
+        y, sr = librosa.load(wav_path, sr=22050, mono=True)
+    finally:
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+
+    hop_length = sr // 2          # 0.5-second steps — finer resolution than detect_highlight
+    frame_length = sr              # 1-second analysis window
+    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+
+    total_duration = len(y) / sr
+    target = max(min_dur, min(max_dur, 4.0))   # default 4 seconds
+    window_frames = max(1, int(target / 0.5))  # each frame = 0.5s
+    window_frames = min(window_frames, len(rms))
+
+    scores = np.convolve(rms, np.ones(window_frames), mode="valid")
+    best_frame = int(np.argmax(scores))
+
+    start = best_frame * 0.5
+    end = min(start + target, total_duration)
+    return float(start), float(end)
+
+
+def concat_clips(first_path: str, second_path: str, output_path: str) -> None:
+    """Concatenate two same-format clips using ffmpeg's concat demuxer (no re-encode)."""
+    concat_txt = output_path.replace(".mp4", "_concat.txt")
+    with open(concat_txt, "w") as f:
+        f.write(f"file '{os.path.abspath(first_path)}'\n")
+        f.write(f"file '{os.path.abspath(second_path)}'\n")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_txt,
+                "-c", "copy",
+                output_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    finally:
+        if os.path.exists(concat_txt):
+            os.remove(concat_txt)
+
+
 def reformat_vertical(input_path: str, output_path: str) -> None:
     subprocess.run(
         [

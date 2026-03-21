@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from downloader import download_video
-from clipper import cut_clip, detect_highlight, reformat_vertical
+from clipper import concat_clips, cut_clip, detect_highlight, detect_hook, reformat_vertical
 from captions import burn_captions, generate_title, transcribe
 
 os.makedirs("exports", exist_ok=True)
@@ -35,11 +35,13 @@ def _update(job_id: str, status: str, message: str) -> None:
 
 
 def run_pipeline(job_id: str, url: str) -> None:
-    raw = f"temp/{job_id}_raw.mp4"
-    clip = f"temp/{job_id}_clip.mp4"
-    vert = f"temp/{job_id}_vertical.mp4"
-    srt = f"temp/{job_id}.srt"
-    final = f"exports/{job_id}_final.mp4"
+    raw    = f"temp/{job_id}_raw.mp4"
+    clip   = f"temp/{job_id}_clip.mp4"
+    vert   = f"temp/{job_id}_vertical.mp4"
+    hook   = f"temp/{job_id}_hook.mp4"
+    hooked = f"temp/{job_id}_hooked.mp4"
+    srt    = f"temp/{job_id}.srt"
+    final  = f"exports/{job_id}_final.mp4"
 
     try:
         _update(job_id, "downloading", "Downloading video...")
@@ -54,18 +56,23 @@ def run_pipeline(job_id: str, url: str) -> None:
         _update(job_id, "reformatting", "Reformatting to 9:16...")
         reformat_vertical(clip, vert)
 
+        _update(job_id, "hooking", "Finding hook moment...")
+        hook_start, hook_end = detect_hook(vert)
+        cut_clip(vert, hook, hook_start, hook_end)
+        concat_clips(hook, vert, hooked)
+
         _update(job_id, "transcribing", "Generating captions...")
-        transcript = transcribe(vert, srt)
+        transcript = transcribe(hooked, srt)
 
         _update(job_id, "burning", "Burning captions...")
-        burn_captions(vert, srt, final)
+        burn_captions(hooked, srt, final)
 
         # Compute title before cleanup/done so all fields are written
         # before status flips to "done" — prevents a race where the frontend
         # polls between "status=done" and "title=..." and gets title=null.
         title = generate_title(transcript)
 
-        for path in [raw, clip, vert, srt]:
+        for path in [raw, clip, vert, hook, hooked, srt]:
             if os.path.exists(path):
                 os.remove(path)
 
