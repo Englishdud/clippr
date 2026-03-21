@@ -73,7 +73,7 @@ function ProgressIndicator({ message }) {
   )
 }
 
-function DownloadPanel({ resultUrl, onReset }) {
+function DownloadPanel({ resultUrl, title, onReset }) {
   return (
     <div className="flex flex-col items-center gap-4 py-2">
       <div className="flex items-center gap-2 text-emerald-400">
@@ -82,6 +82,12 @@ function DownloadPanel({ resultUrl, onReset }) {
         </svg>
         <span className="font-semibold">Clip ready!</span>
       </div>
+      {title && (
+        <div className="w-full rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-center">
+          <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Suggested title</p>
+          <p className="text-white font-semibold text-sm leading-snug">{title}</p>
+        </div>
+      )}
       <a
         href={resultUrl}
         download
@@ -121,6 +127,7 @@ export default function App() {
   const [jobId, setJobId] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [resultUrl, setResultUrl] = useState(null)
+  const [clipTitle, setClipTitle] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
@@ -134,6 +141,7 @@ export default function App() {
 
         if (data.status === 'done') {
           setResultUrl(data.result_url)
+          setClipTitle(data.title || '')
           setAppState('done')
           clearInterval(interval)
         } else if (data.status === 'error') {
@@ -175,6 +183,7 @@ export default function App() {
     setJobId(null)
     setStatusMessage('')
     setResultUrl(null)
+    setClipTitle('')
     setErrorMessage('')
   }
 
@@ -192,7 +201,7 @@ export default function App() {
         )}
 
         {appState === 'done' && (
-          <DownloadPanel resultUrl={resultUrl} onReset={handleReset} />
+          <DownloadPanel resultUrl={resultUrl} title={clipTitle} onReset={handleReset} />
         )}
 
         {appState === 'error' && (
