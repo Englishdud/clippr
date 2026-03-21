@@ -60,14 +60,19 @@ def run_pipeline(job_id: str, url: str) -> None:
         _update(job_id, "burning", "Burning captions...")
         burn_captions(vert, srt, final)
 
+        # Compute title before cleanup/done so all fields are written
+        # before status flips to "done" — prevents a race where the frontend
+        # polls between "status=done" and "title=..." and gets title=null.
+        title = generate_title(transcript)
+
         for path in [raw, clip, vert, srt]:
             if os.path.exists(path):
                 os.remove(path)
 
-        jobs[job_id]["status"] = "done"
-        jobs[job_id]["message"] = "Ready to download!"
         jobs[job_id]["result_url"] = f"/api/download/{job_id}_final.mp4"
-        jobs[job_id]["title"] = generate_title(transcript)
+        jobs[job_id]["title"] = title
+        jobs[job_id]["message"] = "Ready to download!"
+        jobs[job_id]["status"] = "done"  # set last — frontend only reads this after all fields are populated
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
