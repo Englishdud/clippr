@@ -7,8 +7,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from downloader import download_video
-from clipper import concat_clips, cut_clip, detect_highlight, detect_hook, reformat_vertical
+from clipper import concat_clips, cut_clip, detect_highlight, detect_hook, reformat_vertical, trim_to
 from captions import burn_captions, generate_title, overlay_hook_text, pick_hook_text, transcribe
+
+MAX_CLIP_SECONDS = 36  # hard cap on final clip duration (seconds); change here to adjust
 
 os.makedirs("exports", exist_ok=True)
 os.makedirs("temp", exist_ok=True)
@@ -49,7 +51,7 @@ def run_pipeline(job_id: str, url: str) -> None:
         download_video(url, raw)
 
         _update(job_id, "analyzing", "Detecting highlight...")
-        start, end = detect_highlight(raw)
+        start, end = detect_highlight(raw, max_dur=MAX_CLIP_SECONDS)
 
         _update(job_id, "clipping", f"Cutting clip ({int(end - start)}s)...")
         cut_clip(raw, clip, start, end)
@@ -61,6 +63,12 @@ def run_pipeline(job_id: str, url: str) -> None:
         hook_start, hook_end = detect_hook(vert)
         cut_clip(vert, hook, hook_start, hook_end)
         concat_clips(hook, vert, hooked)
+
+        # Hook prepend adds 3–5 s on top of the main clip; trim back to the hard cap.
+        hooked_raw = f"temp/{job_id}_hooked_raw.mp4"
+        os.rename(hooked, hooked_raw)
+        trim_to(hooked_raw, hooked, MAX_CLIP_SECONDS)
+        os.remove(hooked_raw)
 
         _update(job_id, "transcribing", "Generating captions...")
         transcript, segments = transcribe(hooked, srt)
