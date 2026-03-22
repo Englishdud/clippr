@@ -14,14 +14,109 @@ def _format_timestamp(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def transcribe(video_path: str, srt_path: str) -> str:
+def transcribe(video_path: str, srt_path: str) -> tuple[str, list]:
     result = model.transcribe(video_path, verbose=False)
     with open(srt_path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(result["segments"], 1):
             f.write(f"{i}\n")
             f.write(f"{_format_timestamp(seg['start'])} --> {_format_timestamp(seg['end'])}\n")
             f.write(f"{seg['text'].strip()}\n\n")
-    return result["text"].strip()
+    return result["text"].strip(), result["segments"]
+
+
+def pick_hook_text(segments: list) -> str:
+    """Pick the most dramatic/surprising sentence from Whisper segments using rule-based scoring."""
+    if not segments:
+        return ""
+
+    dramatic_words = {
+        "never", "always", "best", "worst", "only", "first", "last",
+        "secret", "truth", "real", "actually", "impossible", "incredible",
+        "amazing", "shocking", "crazy", "insane", "huge", "massive",
+        "win", "lose", "fail", "prove", "change", "game", "unbelievable",
+        "literally", "seriously", "honestly", "wait", "stop", "breaking",
+        "warning", "critical", "deadly", "killed", "million", "billion",
+        "died", "destroyed", "banned", "exposed", "hidden", "discovered",
+        "leaked", "revealed", "confirmed", "wrong", "mistake", "lied",
+        "cheated", "caught", "fired", "arrested", "escaped", "survived",
+    }
+
+    def score(seg: dict) -> float:
+        text = seg["text"].strip()
+        words = text.lower().split()
+        clean_words = [w.strip(".,!?\"'") for w in words]
+
+        # Prefer punchy length (5-15 words)
+        length_score = 1.0 if 5 <= len(words) <= 15 else 0.3
+
+        # Dramatic punctuation is a strong signal
+        punct_score = (text.count("!") * 0.5) + (text.count("?") * 0.4)
+
+        # Dramatic/surprising word hits
+        drama_score = sum(0.4 for w in clean_words if w in dramatic_words)
+
+        # Numbers suggest specific, credible claims
+        number_score = 0.2 if any(c.isdigit() for c in text) else 0.0
+
+        # Slight preference for earlier segments (but not the very first 0.5s which may be filler)
+        start = seg.get("start", 0)
+        time_score = 0.3 if 0.5 <= start <= 20 else 0.0
+
+        return length_score + punct_score + drama_score + number_score + time_score
+
+    best = max(segments, key=score)
+    text = best["text"].strip()
+
+    # Truncate to 12 words so it fits cleanly on screen
+    words = text.split()
+    if len(words) > 12:
+        text = " ".join(words[:12]) + "..."
+
+    return text
+
+
+def overlay_hook_text(video_path: str, text: str, output_path: str, duration: float = 3.0) -> None:
+    """Burn large bold white text with black outline at top of video for the first `duration` seconds."""
+    if not text:
+        import shutil
+        shutil.copy2(video_path, output_path)
+        return
+
+    # Escape characters special to ffmpeg drawtext: \, :, ', %
+    escaped = (
+        text
+        .replace("\\", "\\\\")
+        .replace("'",  "\u2019")   # replace straight apostrophe with curly to avoid shell quoting issues
+        .replace(":",  "\\:")
+        .replace("%",  "\\%")
+    )
+
+    drawtext = (
+        f"drawtext=text='{escaped}'"
+        f":fontname=Impact"
+        f":fontsize=90"
+        f":fontcolor=white"
+        f":borderw=5"
+        f":bordercolor=black"
+        f":x=(w-text_w)/2"
+        f":y=80"
+        f":enable='between(t,0,{duration})'"
+    )
+
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-vf", drawtext,
+            "-c:v", "libx264",
+            "-crf", "23",
+            "-preset", "fast",
+            "-c:a", "copy",
+            output_path,
+        ],
+        check=True,
+        capture_output=True,
+    )
 
 
 def generate_title(transcript_text: str) -> str:
