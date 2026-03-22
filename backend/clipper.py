@@ -108,6 +108,21 @@ def concat_clips(first_path: str, second_path: str, output_path: str) -> None:
             os.remove(concat_txt)
 
 
+def trim_to(input_path: str, output_path: str, max_seconds: float) -> None:
+    """Trim clip to at most max_seconds using stream copy (lossless, fast)."""
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-t", str(max_seconds),
+            "-c", "copy",
+            output_path,
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def reformat_vertical(input_path: str, output_path: str) -> None:
     subprocess.run(
         [
