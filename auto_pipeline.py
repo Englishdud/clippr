@@ -32,7 +32,7 @@ import urllib.request
 
 import yt_dlp
 
-BACKEND = "http://localhost:8000"
+BACKEND = "http://127.0.0.1:8000"
 WATCHLIST = "watchlist.txt"
 QUEUE_DIR = "exports/queue"
 MAX_RESULTS = 5
