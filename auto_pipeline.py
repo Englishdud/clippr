@@ -113,7 +113,7 @@ def search_youtube(keyword: str) -> list[dict]:
 def check_backend() -> bool:
     """Return True if the Clippr.ai backend is reachable."""
     try:
-        _get(f"{BACKEND}/docs")
+        _get(f"{BACKEND}/openapi.json")
         return True
     except Exception:
         return False
