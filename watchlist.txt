@@ -1,0 +1,21 @@
+# Clippr.ai Watchlist
+# ─────────────────────────────────────────────────────────────────────────────
+# One search keyword per line. The script will find the top 5 YouTube videos
+# for each keyword and automatically generate a vertical clip from each one.
+#
+# Rules:
+#   - One keyword per line
+#   - Lines starting with # are comments and are skipped
+#   - Blank lines are ignored
+#   - Add a line containing only the word PAUSED to pause all processing
+#     (remove it or comment it out to resume)
+#
+# Examples:
+#   funny moments
+#   fails compilation
+#   basketball highlights 2024
+#   cooking tutorial quick
+# ─────────────────────────────────────────────────────────────────────────────
+
+funny moments
+fails compilation
